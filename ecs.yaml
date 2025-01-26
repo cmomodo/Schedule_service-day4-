@@ -1,0 +1,54 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: ECS Cluster for Sports API
+
+Resources:
+  # Create an ECS Cluster
+  SportsApiCluster:
+    Type: AWS::ECS::Cluster
+    Properties:
+      ClusterName: sports-api-cluster
+
+  # Task Definition for Sports API
+  SportsApiTaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: sports-api-task
+      Cpu: "256"
+      Memory: "512"
+      NetworkMode: awsvpc
+      RequiresCompatibilities:
+        - FARGATE
+      ExecutionRoleArn: !Sub arn:aws:iam::${AWS::AccountId}:role/ecsTaskExecutionRole
+      ContainerDefinitions:
+        - Name: sports-api-container
+          Image: 449095351082.dkr.ecr.us-east-1.amazonaws.com/sports_api # Replace with your image URI
+          PortMappings:
+            - ContainerPort: 80
+          Environment:
+            - Name: NBA_API
+              Value: "76ccbdb3040557b11709cd3d4e59a313784a25074d26c3c277d513ba9ad73613" # Replace with actual API key or desired value
+
+  # ECS Service to run the Task Definition
+  SportsApiService:
+    Type: AWS::ECS::Service
+    Properties:
+      Cluster: !Ref SportsApiCluster
+      DesiredCount: 1
+      LaunchType: FARGATE
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: ENABLED
+          Subnets:
+            - subnet-086c08f155e218774 # Replace with your actual subnet ID
+          SecurityGroups:
+            - sg-0758ac6971292610b # Replace with your actual security group ID
+      TaskDefinition: !Ref SportsApiTaskDefinition
+
+Outputs:
+  ClusterName:
+    Description: The name of the ECS cluster
+    Value: !Ref SportsApiCluster
+
+  ServiceName:
+    Description: The name of the ECS service
+    Value: !Ref SportsApiService
