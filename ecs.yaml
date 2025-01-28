@@ -1,3 +1,20 @@
+# This CloudFormation template sets up an ECS Cluster for a Sports API application.
+# It includes the following resources:
+#
+# - ECS Cluster: Creates an ECS cluster named 'sports-api-cluster'.
+# - VPC: Creates a new VPC with CIDR block 10.0.0.0/16, DNS support, and DNS hostnames enabled.
+# - Subnets: Creates two public subnets in different availability zones within the VPC.
+# - Internet Gateway: Creates and attaches an Internet Gateway to the VPC.
+# - Route Table: Creates a route table and adds a default route to the Internet Gateway.
+# - Security Group: Creates a security group allowing HTTP traffic on port 80.
+# - Task Definition: Defines an ECS task with a container running the Sports API.
+# - IAM Role: Creates an IAM role for ECS task execution with necessary policies.
+# - Application Load Balancer (ALB): Creates an ALB with an associated security group.
+# - Target Group: Creates a target group for the ALB with health check configuration.
+# - Listener: Creates a listener for the ALB to forward traffic to the target group.
+# - ECS Service: Creates an ECS service to run the task definition, with load balancer configuration.
+#
+
 AWSTemplateFormatVersion: "2010-09-09"
 Description: ECS Cluster for Sports API
 Resources:
@@ -172,7 +189,7 @@ Resources:
     Properties:
       Cluster: !Ref SportsApiCluster
       LaunchType: FARGATE
-      DesiredCount: 1
+      DesiredCount: 2
       NetworkConfiguration:
         AwsvpcConfiguration:
           Subnets:
@@ -190,6 +207,10 @@ Resources:
       - SportsApiALB
       - SportsApiTargetGroup
 
+# Outputs:
+# - SportsApiALBDNS: DNS name of the ALB.
+# - SportsApiTargetGroupArn: ARN of the target group.
+# - SportsApiServiceName: Name of the ECS service.
 Outputs:
   SportsApiALBDNS:
     Description: "DNS Name of the Sports API ALB"
