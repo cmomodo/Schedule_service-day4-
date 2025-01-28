@@ -1,12 +1,91 @@
 AWSTemplateFormatVersion: "2010-09-09"
 Description: ECS Cluster for Sports API
-
 Resources:
   # Create an ECS Cluster
   SportsApiCluster:
     Type: AWS::ECS::Cluster
     Properties:
       ClusterName: sports-api-cluster
+
+  # Create a new VPC
+  SportsApiVpc:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/16
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+
+  # Create a new public subnet
+  SportsApiSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref SportsApiVpc
+      CidrBlock: 10.0.1.0/24
+      AvailabilityZone: !Select [0, !GetAZs ""]
+      MapPublicIpOnLaunch: true # Enable public IP for instances in this subnet
+
+  SportsApiSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref SportsApiVpc
+      CidrBlock: 10.0.2.0/24
+      AvailabilityZone: !Select [1, !GetAZs ""]
+      MapPublicIpOnLaunch: true # Enable public IP for instances in this subnet
+
+  # Create an Internet Gateway
+  SportsApiInternetGateway:
+    Type: AWS::EC2::InternetGateway
+
+  # Attach Internet Gateway to VPC
+  SportsApiGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref SportsApiVpc
+      InternetGatewayId: !Ref SportsApiInternetGateway
+
+  # Create a route table for the public subnet
+  SportsApiRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref SportsApiVpc
+
+  # Add a default route to the Internet Gateway
+  SportsApiDefaultRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref SportsApiRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref SportsApiInternetGateway
+
+  # Associate the public subnet with the route table
+  SportsApiSubnetRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref SportsApiSubnet
+      RouteTableId: !Ref SportsApiRouteTable
+
+  SportsApiSubnetRouteTableAssociation2:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref SportsApiSubnet2
+      RouteTableId: !Ref SportsApiRouteTable
+
+  # Create a security group with inbound rules
+  SportsApiSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow HTTP traffic
+      VpcId: !Ref SportsApiVpc
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          FromPort: 0
+          ToPort: 65535
+          CidrIp: 0.0.0.0/0
 
   # Task Definition for Sports API
   SportsApiTaskDefinition:
@@ -18,37 +97,108 @@ Resources:
       NetworkMode: awsvpc
       RequiresCompatibilities:
         - FARGATE
-      ExecutionRoleArn: !Sub arn:aws:iam::${AWS::AccountId}:role/ecsTaskExecutionRole
+      ExecutionRoleArn: !GetAtt EcsTaskExecutionRole.Arn
       ContainerDefinitions:
         - Name: sports-api-container
           Image: 449095351082.dkr.ecr.us-east-1.amazonaws.com/sports_api # Replace with your image URI
           PortMappings:
-            - ContainerPort: 80
+            - ContainerPort: 8080
+              Protocol: tcp
+              AppProtocol: http
           Environment:
             - Name: NBA_API
               Value: "76ccbdb3040557b11709cd3d4e59a313784a25074d26c3c277d513ba9ad73613" # Replace with actual API key or desired value
+
+  # Create ECS Task Execution Role
+  EcsTaskExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${AWS::StackName}-EcsTaskExecutionRole"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+        - arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly
+
+  # Create an Application Load Balancer (ALB)
+  SportsApiALB:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: sports-api-alb
+      Scheme: internet-facing
+      Subnets:
+        - !Ref SportsApiSubnet
+        - !Ref SportsApiSubnet2
+      SecurityGroups:
+        - !Ref SportsApiSecurityGroup
+      Type: application
+
+  # Create a target group for the ALB
+  SportsApiTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: Ecs-sports-api-service
+      Port: 8080
+      Protocol: HTTP
+      VpcId: !Ref SportsApiVpc
+      TargetType: ip
+      HealthCheckProtocol: HTTP
+      HealthCheckPort: "8080"
+      HealthCheckPath: /health
+      HealthCheckIntervalSeconds: 60
+      HealthCheckTimeoutSeconds: 10
+      HealthyThresholdCount: 3
+      UnhealthyThresholdCount: 3
+
+  # Create a listener for the ALB
+  SportsApiListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref SportsApiALB
+      Port: 80
+      Protocol: HTTP
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref SportsApiTargetGroup
 
   # ECS Service to run the Task Definition
   SportsApiService:
     Type: AWS::ECS::Service
     Properties:
       Cluster: !Ref SportsApiCluster
-      DesiredCount: 1
       LaunchType: FARGATE
+      DesiredCount: 1
       NetworkConfiguration:
         AwsvpcConfiguration:
-          AssignPublicIp: ENABLED
           Subnets:
-            - subnet-086c08f155e218774 # Replace with your actual subnet ID
+            - !Ref SportsApiSubnet
+            - !Ref SportsApiSubnet2
           SecurityGroups:
-            - sg-0758ac6971292610b # Replace with your actual security group ID
+            - !Ref SportsApiSecurityGroup
       TaskDefinition: !Ref SportsApiTaskDefinition
+      LoadBalancers:
+        - ContainerName: sports-api-container
+          ContainerPort: 8080
+          TargetGroupArn: !Ref SportsApiTargetGroup
+    DependsOn:
+      - SportsApiListener
+      - SportsApiALB
+      - SportsApiTargetGroup
 
 Outputs:
-  ClusterName:
-    Description: The name of the ECS cluster
-    Value: !Ref SportsApiCluster
+  SportsApiALBDNS:
+    Description: "DNS Name of the Sports API ALB"
+    Value: !GetAtt SportsApiALB.DNSName
 
-  ServiceName:
-    Description: The name of the ECS service
+  SportsApiTargetGroupArn:
+    Description: "ARN of the Sports API Target Group"
+    Value: !Ref SportsApiTargetGroup
+
+  SportsApiServiceName:
+    Description: "Name of the Sports API ECS Service"
     Value: !Ref SportsApiService
