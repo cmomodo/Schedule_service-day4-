@@ -18,5 +18,12 @@
 - Run the following commands
 
 ```
-docker-compose up
+aws cloudformation deploy \
+  --template-file ecs.yaml \
+  --stack-name sports-api-stack \
+  --capabilities CAPABILITY_NAMED_IAM \
+  --parameter-overrides \
+    VpcId=vpc-
+vpc-007940c16331d8332 \
+    SubnetIds=subnet-subnet-007e23dbf72eda1d1,subnet-086c08f155e218774
 ```
