@@ -16,7 +16,17 @@
 #
 
 AWSTemplateFormatVersion: "2010-09-09"
-Description: ECS Cluster for Sports API
+Description: ECS Cluster for Sports API using Default VPC
+
+Parameters:
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Description: Select the Default VPC
+
+  SubnetIds:
+    Type: List<AWS::EC2::Subnet::Id>
+    Description: Select at least two subnets from the Default VPC
+
 Resources:
   # Create an ECS Cluster
   SportsApiCluster:
@@ -24,75 +34,12 @@ Resources:
     Properties:
       ClusterName: sports-api-cluster
 
-  # Create a new VPC
-  SportsApiVpc:
-    Type: AWS::EC2::VPC
-    Properties:
-      CidrBlock: 10.0.0.0/16
-      EnableDnsSupport: true
-      EnableDnsHostnames: true
-
-  # Create a new public subnet
-  SportsApiSubnet:
-    Type: AWS::EC2::Subnet
-    Properties:
-      VpcId: !Ref SportsApiVpc
-      CidrBlock: 10.0.1.0/24
-      AvailabilityZone: !Select [0, !GetAZs ""]
-      MapPublicIpOnLaunch: true # Enable public IP for instances in this subnet
-
-  SportsApiSubnet2:
-    Type: AWS::EC2::Subnet
-    Properties:
-      VpcId: !Ref SportsApiVpc
-      CidrBlock: 10.0.2.0/24
-      AvailabilityZone: !Select [1, !GetAZs ""]
-      MapPublicIpOnLaunch: true # Enable public IP for instances in this subnet
-
-  # Create an Internet Gateway
-  SportsApiInternetGateway:
-    Type: AWS::EC2::InternetGateway
-
-  # Attach Internet Gateway to VPC
-  SportsApiGatewayAttachment:
-    Type: AWS::EC2::VPCGatewayAttachment
-    Properties:
-      VpcId: !Ref SportsApiVpc
-      InternetGatewayId: !Ref SportsApiInternetGateway
-
-  # Create a route table for the public subnet
-  SportsApiRouteTable:
-    Type: AWS::EC2::RouteTable
-    Properties:
-      VpcId: !Ref SportsApiVpc
-
-  # Add a default route to the Internet Gateway
-  SportsApiDefaultRoute:
-    Type: AWS::EC2::Route
-    Properties:
-      RouteTableId: !Ref SportsApiRouteTable
-      DestinationCidrBlock: 0.0.0.0/0
-      GatewayId: !Ref SportsApiInternetGateway
-
-  # Associate the public subnet with the route table
-  SportsApiSubnetRouteTableAssociation:
-    Type: AWS::EC2::SubnetRouteTableAssociation
-    Properties:
-      SubnetId: !Ref SportsApiSubnet
-      RouteTableId: !Ref SportsApiRouteTable
-
-  SportsApiSubnetRouteTableAssociation2:
-    Type: AWS::EC2::SubnetRouteTableAssociation
-    Properties:
-      SubnetId: !Ref SportsApiSubnet2
-      RouteTableId: !Ref SportsApiRouteTable
-
-  # Create a security group with inbound rules
+  # Security Group
   SportsApiSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
       GroupDescription: Allow HTTP traffic
-      VpcId: !Ref SportsApiVpc
+      VpcId: !Ref VpcId
       SecurityGroupIngress:
         - IpProtocol: tcp
           FromPort: 80
@@ -148,9 +95,7 @@ Resources:
     Properties:
       Name: sports-api-alb
       Scheme: internet-facing
-      Subnets:
-        - !Ref SportsApiSubnet
-        - !Ref SportsApiSubnet2
+      Subnets: !Ref SubnetIds
       SecurityGroups:
         - !Ref SportsApiSecurityGroup
       Type: application
@@ -162,11 +107,11 @@ Resources:
       Name: Ecs-sports-api-service
       Port: 8080
       Protocol: HTTP
-      VpcId: !Ref SportsApiVpc
+      VpcId: !Ref VpcId
       TargetType: ip
       HealthCheckProtocol: HTTP
       HealthCheckPort: "8080"
-      HealthCheckPath: /health
+      HealthCheckPath: /sports
       HealthCheckIntervalSeconds: 60
       HealthCheckTimeoutSeconds: 10
       HealthyThresholdCount: 3
@@ -187,17 +132,17 @@ Resources:
   SportsApiService:
     Type: AWS::ECS::Service
     Properties:
+      ServiceName: sports-api-service
       Cluster: !Ref SportsApiCluster
-      LaunchType: FARGATE
+      TaskDefinition: !Ref SportsApiTaskDefinition
       DesiredCount: 2
+      LaunchType: FARGATE
       NetworkConfiguration:
         AwsvpcConfiguration:
-          Subnets:
-            - !Ref SportsApiSubnet
-            - !Ref SportsApiSubnet2
+          AssignPublicIp: ENABLED
+          Subnets: !Ref SubnetIds
           SecurityGroups:
             - !Ref SportsApiSecurityGroup
-      TaskDefinition: !Ref SportsApiTaskDefinition
       LoadBalancers:
         - ContainerName: sports-api-container
           ContainerPort: 8080
