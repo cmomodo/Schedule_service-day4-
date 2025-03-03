@@ -16,203 +16,198 @@
 #
 
 AWSTemplateFormatVersion: "2010-09-09"
-Description: ECS Cluster for Sports API using Default VPC
+Description: Sports API ECS Cluster with ALB, VPC and Subnets
+
+Parameters:
+  NBAAPIEndpoint:
+    Type: String
+    Description: NBA API endpoint URL
+    Default: "https://serpapi.com/search.json" # Replace with actual URL when known
 
 Resources:
   # VPC
-  SportsApiVPC:
+  SportsAPIVPC:
     Type: AWS::EC2::VPC
     Properties:
       CidrBlock: 10.0.0.0/16
-      EnableDnsSupport: true
       EnableDnsHostnames: true
+      EnableDnsSupport: true
       Tags:
         - Key: Name
-          Value: SportsApiVPC
-        - Key: Environment
-          Value: Production
-        - Key: Project
-          Value: SportsAPI
-        - Key: Owner
-          Value: DevOps
-        - Key: CostCenter
-          Value: Infrastructure
+          Value: sports-api-vpc
 
-  # Subnets
-  SportsApiSubnet1:
+  # Public Subnet 1
+  PublicSubnet1:
     Type: AWS::EC2::Subnet
     Properties:
-      VpcId: !Ref SportsApiVPC
+      VpcId: !Ref SportsAPIVPC
       CidrBlock: 10.0.1.0/24
-      AvailabilityZone: !Select
-        - 0
-        - !GetAZs ""
+      AvailabilityZone: !Select [0, !GetAZs ""]
       MapPublicIpOnLaunch: true
       Tags:
         - Key: Name
-          Value: SportsApiSubnet1
-        - Key: Environment
-          Value: Production
-        - Key: Project
-          Value: SportsAPI
-        - Key: Type
-          Value: Public
-        - Key: Tier
-          Value: Web
+          Value: sports-api-public-subnet-1
 
-  SportsApiSubnet2:
+  # Public Subnet 2
+  PublicSubnet2:
     Type: AWS::EC2::Subnet
     Properties:
-      VpcId: !Ref SportsApiVPC
+      VpcId: !Ref SportsAPIVPC
       CidrBlock: 10.0.2.0/24
-      AvailabilityZone: !Select
-        - 1
-        - !GetAZs ""
+      AvailabilityZone: !Select [1, !GetAZs ""]
       MapPublicIpOnLaunch: true
       Tags:
         - Key: Name
-          Value: SportsApiSubnet2
-        - Key: Environment
-          Value: Production
-        - Key: Project
-          Value: SportsAPI
-        - Key: Type
-          Value: Public
-        - Key: Tier
-          Value: Web
+          Value: sports-api-public-subnet-2
 
   # Internet Gateway
-  SportsApiInternetGateway:
+  InternetGateway:
     Type: AWS::EC2::InternetGateway
     Properties:
       Tags:
         - Key: Name
-          Value: SportsApiInternetGateway
+          Value: sports-api-igw
 
-  # Attach Internet Gateway to VPC
-  AttachGateway:
+  # Attach Gateway to VPC
+  GatewayAttachment:
     Type: AWS::EC2::VPCGatewayAttachment
     Properties:
-      VpcId: !Ref SportsApiVPC
-      InternetGatewayId: !Ref SportsApiInternetGateway
+      InternetGatewayId: !Ref InternetGateway
+      VpcId: !Ref SportsAPIVPC
 
   # Route Table
-  SportsApiRouteTable:
+  PublicRouteTable:
     Type: AWS::EC2::RouteTable
     Properties:
-      VpcId: !Ref SportsApiVPC
+      VpcId: !Ref SportsAPIVPC
       Tags:
         - Key: Name
-          Value: SportsApiRouteTable
+          Value: sports-api-public-rt
 
-  # Route to Internet Gateway
-  SportsApiRoute:
+  # Route to Internet
+  PublicRoute:
     Type: AWS::EC2::Route
-    DependsOn: AttachGateway
+    DependsOn: GatewayAttachment
     Properties:
-      RouteTableId: !Ref SportsApiRouteTable
+      RouteTableId: !Ref PublicRouteTable
       DestinationCidrBlock: 0.0.0.0/0
-      GatewayId: !Ref SportsApiInternetGateway
+      GatewayId: !Ref InternetGateway
 
-  # Subnet Route Table Association
-  Subnet1RouteTableAssociation:
+  # Subnet Route Table Associations
+  SubnetRouteTableAssociation1:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
-      SubnetId: !Ref SportsApiSubnet1
-      RouteTableId: !Ref SportsApiRouteTable
+      SubnetId: !Ref PublicSubnet1
+      RouteTableId: !Ref PublicRouteTable
 
-  Subnet2RouteTableAssociation:
+  SubnetRouteTableAssociation2:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
-      SubnetId: !Ref SportsApiSubnet2
-      RouteTableId: !Ref SportsApiRouteTable
+      SubnetId: !Ref PublicSubnet2
+      RouteTableId: !Ref PublicRouteTable
 
-  # Create an ECS Cluster
-  SportsApiCluster:
+  # ECS Cluster
+  SportsAPICluster:
     Type: AWS::ECS::Cluster
     Properties:
       ClusterName: sports-api-cluster
-      Tags:
-        - Key: Name
-          Value: SportsApiCluster
-        - Key: Environment
-          Value: Production
-        - Key: Project
-          Value: SportsAPI
-        - Key: Service
-          Value: API
-        - Key: Owner
-          Value: DevOps
 
-  # Security Group
-  SportsApiSecurityGroup:
-    Type: AWS::EC2::SecurityGroup
-    Properties:
-      GroupDescription: Allow HTTP traffic
-      VpcId: !Ref SportsApiVPC
-      SecurityGroupIngress:
-        - IpProtocol: tcp
-          FromPort: 80
-          ToPort: 80
-          CidrIp: 0.0.0.0/0
-      SecurityGroupEgress:
-        - IpProtocol: -1
-          FromPort: 0
-          ToPort: 65535
-          CidrIp: 0.0.0.0/0
-      Tags:
-        - Key: Name
-          Value: SportsApiSecurityGroup
-        - Key: Environment
-          Value: Production
-        - Key: Project
-          Value: SportsAPI
-        - Key: Type
-          Value: SecurityGroup
-
-  # Task Definition for Sports API
-  SportsApiTaskDefinition:
+  # Task Definition
+  SportsAPITaskDefinition:
     Type: AWS::ECS::TaskDefinition
     Properties:
       Family: sports-api-task
-      Cpu: "256"
-      Memory: "512"
       NetworkMode: awsvpc
       RequiresCompatibilities:
         - FARGATE
-      ExecutionRoleArn: !GetAtt EcsTaskExecutionRole.Arn
+      Cpu: "256"
+      Memory: "512"
+      ExecutionRoleArn: !GetAtt ECSTaskExecutionRole.Arn
       ContainerDefinitions:
         - Name: sports-api-container
-          Image: 449095351082.dkr.ecr.us-east-1.amazonaws.com/sports_api # Replace with your image URI
+          Image: 449095351082.dkr.ecr.us-east-1.amazonaws.com/sports-api:sports-api-latest
           PortMappings:
-            - ContainerPort: 8080
+            - ContainerPort: 80
               Protocol: tcp
-              AppProtocol: http
           Environment:
             - Name: NBA_API
-              Value: 76ccbdb3040557b11709cd3d4e59a313784a25074d26c3c277d513ba9ad73613 # Replace with actual API key or desired value
-          LogConfiguration:
-            LogDriver: awslogs
-            Options:
-              awslogs-group: /ecs/sports-api
-              awslogs-region: us-east-1
-              awslogs-stream-prefix: ecs
-              awslogs-create-group: true
-      Tags:
-        - Key: Name
-          Value: SportsApiTaskDef
-        - Key: Environment
-          Value: Production
-        - Key: Project
-          Value: SportsAPI
-        - Key: Service
-          Value: API
+              Value: !Ref NBAAPIEndpoint
+          Essential: true
 
-  # Create ECS Task Execution Role
-  EcsTaskExecutionRole:
+  # ECS Service
+  SportsAPIService:
+    Type: AWS::ECS::Service
+    DependsOn: ALBListener
+    Properties:
+      Cluster: !Ref SportsAPICluster
+      ServiceName: sports-api-service
+      TaskDefinition: !Ref SportsAPITaskDefinition
+      DesiredCount: 2
+      LaunchType: FARGATE
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: ENABLED
+          Subnets:
+            - !Ref PublicSubnet1
+            - !Ref PublicSubnet2
+          SecurityGroups:
+            - !Ref SportsAPISecurityGroup
+      LoadBalancers:
+        - ContainerName: sports-api-container
+          ContainerPort: 80
+          TargetGroupArn: !Ref SportsAPITargetGroup
+
+  # Security Group
+  SportsAPISecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for Sports API
+      VpcId: !Ref SportsAPIVPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 0
+          ToPort: 65535
+          CidrIp: 0.0.0.0/0
+
+  # Application Load Balancer
+  SportsAPIALB:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: sports-api-alb
+      Scheme: internet-facing
+      Subnets:
+        - !Ref PublicSubnet1
+        - !Ref PublicSubnet2
+      SecurityGroups:
+        - !Ref SportsAPISecurityGroup
+      Type: application
+
+  # ALB Listener
+  ALBListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref SportsAPIALB
+      Port: 80
+      Protocol: HTTP
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref SportsAPITargetGroup
+
+  # Target Group
+  SportsAPITargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: ecs-sports-api-service
+      Protocol: HTTP
+      Port: 80
+      VpcId: !Ref SportsAPIVPC
+      HealthCheckPath: /sports
+      TargetType: ip
+
+  # ECS Task Execution Role
+  ECSTaskExecutionRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: !Sub ${AWS::StackName}-EcsTaskExecutionRole
       AssumeRolePolicyDocument:
         Version: "2012-10-17"
         Statement:
@@ -222,134 +217,17 @@ Resources:
             Action: sts:AssumeRole
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
-        - arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly
-        - arn:aws:iam::aws:policy/CloudWatchLogsFullAccess
 
-  # Create an Application Load Balancer (ALB)
-  SportsApiALB:
-    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
-    Properties:
-      Name: sports-api-alb
-      Scheme: internet-facing
-      Subnets:
-        - !Ref SportsApiSubnet1
-        - !Ref SportsApiSubnet2
-      SecurityGroups:
-        - !Ref SportsApiSecurityGroup
-      Type: application
-      Tags:
-        - Key: Name
-          Value: SportsApiALB
-        - Key: Environment
-          Value: Production
-        - Key: Project
-          Value: SportsAPI
-        - Key: Service
-          Value: LoadBalancer
-
-  # Create a target group for the ALB
-  SportsApiTargetGroup:
-    Type: AWS::ElasticLoadBalancingV2::TargetGroup
-    Properties:
-      Name: Ecs-sports-api-service
-      Port: 8080
-      Protocol: HTTP
-      VpcId: !Ref SportsApiVPC
-      TargetType: ip
-      HealthCheckProtocol: HTTP
-      HealthCheckPort: "8080"
-      HealthCheckPath: /sports
-      HealthCheckIntervalSeconds: 30
-      HealthCheckTimeoutSeconds: 5
-      HealthyThresholdCount: 2
-      UnhealthyThresholdCount: 2
-      TargetGroupAttributes:
-        - Key: deregistration_delay.timeout_seconds
-          Value: 30
-
-  # Create a listener for the ALB
-  SportsApiListener:
-    Type: AWS::ElasticLoadBalancingV2::Listener
-    Properties:
-      LoadBalancerArn: !Ref SportsApiALB
-      Port: 80
-      Protocol: HTTP
-      DefaultActions:
-        - Type: forward
-          TargetGroupArn: !Ref SportsApiTargetGroup
-
-  # ECS Service to run the Task Definition
-  SportsApiService:
-    Type: AWS::ECS::Service
-    Properties:
-      ServiceName: sports-api-service
-      Cluster: !Ref SportsApiCluster
-      TaskDefinition: !Ref SportsApiTaskDefinition
-      DesiredCount: 2
-      LaunchType: FARGATE
-      NetworkConfiguration:
-        AwsvpcConfiguration:
-          AssignPublicIp: ENABLED
-          Subnets:
-            - !Ref SportsApiSubnet1
-            - !Ref SportsApiSubnet2
-          SecurityGroups:
-            - !Ref SportsApiSecurityGroup
-      LoadBalancers:
-        - ContainerName: sports-api-container
-          ContainerPort: 8080
-          TargetGroupArn: !Ref SportsApiTargetGroup
-      HealthCheckGracePeriodSeconds: 300
-      DeploymentConfiguration:
-        DeploymentCircuitBreaker:
-          Enable: true
-          Rollback: true
-        MaximumPercent: 200
-        MinimumHealthyPercent: 50
-      Tags:
-        - Key: Name
-          Value: SportsApiService
-        - Key: Environment
-          Value: Production
-        - Key: Project
-          Value: SportsAPI
-        - Key: Service
-          Value: API
-        - Key: Owner
-          Value: DevOps
-    DependsOn:
-      - SportsApiListener
-      - SportsApiALB
-      - SportsApiTargetGroup
-      - SportsApiRoute
-      - Subnet1RouteTableAssociation
-      - Subnet2RouteTableAssociation
-
-# Outputs:
-# - SportsApiALBDNS: DNS name of the ALB.
-# - SportsApiTargetGroupArn: ARN of the target group.
-# - SportsApiServiceName: Name of the ECS service.
 Outputs:
-  SportsApiALBDNS:
-    Description: DNS Name of the Sports API ALB
-    Value: !GetAtt SportsApiALB.DNSName
-
-  SportsApiTargetGroupArn:
-    Description: ARN of the Sports API Target Group
-    Value: !Ref SportsApiTargetGroup
-
-  SportsApiServiceName:
-    Description: Name of the Sports API ECS Service
-    Value: !Ref SportsApiService
-
-  VpcId:
-    Description: ID of the VPC
-    Value: !Ref SportsApiVPC
-
+  ALBEndpoint:
+    Description: URL of the Application Load Balancer
+    Value: !GetAtt SportsAPIALB.DNSName
+  VPCId:
+    Description: VPC ID
+    Value: !Ref SportsAPIVPC
   Subnet1Id:
-    Description: ID of Subnet 1
-    Value: !Ref SportsApiSubnet1
-
+    Description: First Public Subnet ID
+    Value: !Ref PublicSubnet1
   Subnet2Id:
-    Description: ID of Subnet 2
-    Value: !Ref SportsApiSubnet2
+    Description: Second Public Subnet ID
+    Value: !Ref PublicSubnet2
