@@ -1,20 +1,3 @@
-# This CloudFormation template sets up an ECS Cluster for a Sports API application.
-# It includes the following resources:
-#
-# - ECS Cluster: Creates an ECS cluster named 'sports-api-cluster'.
-# - VPC: Creates a new VPC with CIDR block 10.0.0.0/16, DNS support, and DNS hostnames enabled.
-# - Subnets: Creates two public subnets in different availability zones within the VPC.
-# - Internet Gateway: Creates and attaches an Internet Gateway to the VPC.
-# - Route Table: Creates a route table and adds a default route to the Internet Gateway.
-# - Security Group: Creates a security group allowing HTTP traffic on port 80.
-# - Task Definition: Defines an ECS task with a container running the Sports API.
-# - IAM Role: Creates an IAM role for ECS task execution with necessary policies.
-# - Application Load Balancer (ALB): Creates an ALB with an associated security group.
-# - Target Group: Creates a target group for the ALB with health check configuration.
-# - Listener: Creates a listener for the ALB to forward traffic to the target group.
-# - ECS Service: Creates an ECS service to run the task definition, with load balancer configuration.
-#
-
 AWSTemplateFormatVersion: "2010-09-09"
 Description: Sports API ECS Cluster with ALB, VPC and Subnets
 
@@ -112,6 +95,13 @@ Resources:
     Properties:
       ClusterName: sports-api-cluster
 
+  # Add CloudWatch Log Group for container logs
+  SportsAPIContainerLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /ecs/sports-api-container-log-group
+      RetentionInDays: 14
+
   # Task Definition
   SportsAPITaskDefinition:
     Type: AWS::ECS::TaskDefinition
@@ -127,12 +117,18 @@ Resources:
         - Name: sports-api-container
           Image: 449095351082.dkr.ecr.us-east-1.amazonaws.com/sports-api:sports-api-latest
           PortMappings:
-            - ContainerPort: 80
+            - ContainerPort: 8080 # changed from 80 to 8080
               Protocol: tcp
           Environment:
             - Name: NBA_API
               Value: !Ref NBAAPIEndpoint
           Essential: true
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref SportsAPIContainerLogGroup
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: sports-api
 
   # ECS Service
   SportsAPIService:
@@ -154,7 +150,7 @@ Resources:
             - !Ref SportsAPISecurityGroup
       LoadBalancers:
         - ContainerName: sports-api-container
-          ContainerPort: 80
+          ContainerPort: 8080 # changed from 80 to 8080
           TargetGroupArn: !Ref SportsAPITargetGroup
 
   # Security Group
@@ -187,7 +183,7 @@ Resources:
     Type: AWS::ElasticLoadBalancingV2::Listener
     Properties:
       LoadBalancerArn: !Ref SportsAPIALB
-      Port: 80
+      Port: 8080 # changed from 80 to 8080
       Protocol: HTTP
       DefaultActions:
         - Type: forward
@@ -199,10 +195,14 @@ Resources:
     Properties:
       Name: ecs-sports-api-service
       Protocol: HTTP
-      Port: 80
+      Port: 8080 # changed from 80 to 8080
       VpcId: !Ref SportsAPIVPC
       HealthCheckPath: /sports
-      TargetType: ip
+      TargetType: ip # Add this line
+      HealthCheckIntervalSeconds: 30
+      HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 2
+      UnhealthyThresholdCount: 3
 
   # ECS Task Execution Role
   ECSTaskExecutionRole:
