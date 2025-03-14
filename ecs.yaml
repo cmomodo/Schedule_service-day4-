@@ -161,8 +161,8 @@ Resources:
       VpcId: !Ref SportsAPIVPC
       SecurityGroupIngress:
         - IpProtocol: tcp
-          FromPort: 0
-          ToPort: 65535
+          FromPort: 8080
+          ToPort: 8080
           CidrIp: 0.0.0.0/0
 
   # Application Load Balancer
@@ -217,6 +217,14 @@ Resources:
             Action: sts:AssumeRole
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+
+  # VPC Link
+  VPCLink:
+    Type: AWS::ApiGateway::VpcLink
+    Properties:
+      Name: SportsAPIVPCLink
+      TargetArns:
+        - !Ref SportsAPIALB
 
 Outputs:
   ALBEndpoint:
