@@ -161,6 +161,10 @@ Resources:
       VpcId: !Ref SportsAPIVPC
       SecurityGroupIngress:
         - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
           FromPort: 8080
           ToPort: 8080
           CidrIp: 0.0.0.0/0
@@ -177,6 +181,7 @@ Resources:
       SecurityGroups:
         - !Ref SportsAPISecurityGroup
       Type: application
+      IpAddressType: ipv4
 
   # ALB Listener
   ALBListener:
@@ -239,3 +244,9 @@ Outputs:
   Subnet2Id:
     Description: Second Public Subnet ID
     Value: !Ref PublicSubnet2
+  VPCLinkId:
+    Description: VPC Link ID
+    Value: !Ref VPCLink
+  ALBFullName:
+    Description: Full name of the ALB
+    Value: !GetAtt SportsAPIALB.LoadBalancerFullName
