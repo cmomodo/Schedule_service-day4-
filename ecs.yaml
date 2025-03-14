@@ -169,7 +169,7 @@ Resources:
           ToPort: 8080
           CidrIp: 0.0.0.0/0
 
-  # Application Load Balancer
+  # Application Load Balancer (changed from Network Load Balancer)
   SportsAPIALB:
     Type: AWS::ElasticLoadBalancingV2::LoadBalancer
     Properties:
@@ -179,7 +179,7 @@ Resources:
         - !Ref PublicSubnet1
         - !Ref PublicSubnet2
       SecurityGroups:
-        - !Ref SportsAPISecurityGroup
+        - !Ref ALBSecurityGroup
       Type: application
       IpAddressType: ipv4
 
@@ -187,27 +187,40 @@ Resources:
   ALBListener:
     Type: AWS::ElasticLoadBalancingV2::Listener
     Properties:
-      LoadBalancerArn: !Ref SportsAPIALB
-      Port: 8080 # changed from 80 to 8080
       Protocol: HTTP
+      LoadBalancerArn: !Ref SportsAPIALB
+      Port: 8080
       DefaultActions:
         - Type: forward
           TargetGroupArn: !Ref SportsAPITargetGroup
 
-  # Target Group
+  # Target Group (updated for ALB)
   SportsAPITargetGroup:
     Type: AWS::ElasticLoadBalancingV2::TargetGroup
     Properties:
       Name: ecs-sports-api-service
       Protocol: HTTP
-      Port: 8080 # changed from 80 to 8080
+      Port: 8080
       VpcId: !Ref SportsAPIVPC
-      HealthCheckPath: /sports
-      TargetType: ip # Add this line
+      HealthCheckPath: /health
+      HealthCheckProtocol: HTTP
       HealthCheckIntervalSeconds: 30
       HealthCheckTimeoutSeconds: 5
       HealthyThresholdCount: 2
       UnhealthyThresholdCount: 3
+      TargetType: ip
+
+  # ALB Security Group
+  ALBSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for Sports API ALB
+      VpcId: !Ref SportsAPIVPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 8080
+          ToPort: 8080
+          CidrIp: 0.0.0.0/0
 
   # ECS Task Execution Role
   ECSTaskExecutionRole:
@@ -223,14 +236,6 @@ Resources:
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
 
-  # VPC Link
-  VPCLink:
-    Type: AWS::ApiGateway::VpcLink
-    Properties:
-      Name: SportsAPIVPCLink
-      TargetArns:
-        - !Ref SportsAPIALB
-
 Outputs:
   ALBEndpoint:
     Description: URL of the Application Load Balancer
@@ -244,9 +249,6 @@ Outputs:
   Subnet2Id:
     Description: Second Public Subnet ID
     Value: !Ref PublicSubnet2
-  VPCLinkId:
-    Description: VPC Link ID
-    Value: !Ref VPCLink
   ALBFullName:
     Description: Full name of the ALB
     Value: !GetAtt SportsAPIALB.LoadBalancerFullName
