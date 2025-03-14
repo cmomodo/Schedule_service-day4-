@@ -202,7 +202,7 @@ Resources:
       Protocol: HTTP
       Port: 8080
       VpcId: !Ref SportsAPIVPC
-      HealthCheckPath: /health
+      HealthCheckPath: /sports
       HealthCheckProtocol: HTTP
       HealthCheckIntervalSeconds: 30
       HealthCheckTimeoutSeconds: 5
