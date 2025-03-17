@@ -1,0 +1,63 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: API Gateway for Sports API ECS Service
+
+Parameters:
+  LoadBalancerDNS:
+    Type: String
+    Description: DNS name of the Application Load Balancer
+    Default: "sports-api-alb-1583485513.us-east-1.elb.amazonaws.com"
+
+Resources:
+  # API Gateway
+  SportsAPI:
+    Type: AWS::ApiGateway::RestApi
+    Properties:
+      Name: sports-api
+      Description: API Gateway for Sports API Service
+      EndpointConfiguration:
+        Types:
+          - REGIONAL
+
+  # API Resource
+  SportsResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref SportsAPI
+      ParentId: !GetAtt SportsAPI.RootResourceId
+      PathPart: "sports"
+
+  # API Method
+  SportsMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref SportsAPI
+      ResourceId: !Ref SportsResource
+      HttpMethod: GET
+      AuthorizationType: NONE
+      Integration:
+        Type: HTTP_PROXY
+        IntegrationHttpMethod: GET
+        Uri: !Sub "http://sports-api-alb-1583485513.us-east-1.elb.amazonaws.com:8080/sports"
+        TimeoutInMillis: 29000
+        IntegrationResponses:
+          - StatusCode: 200
+
+  # API Deployment
+  APIDeployment:
+    Type: AWS::ApiGateway::Deployment
+    DependsOn: SportsMethod
+    Properties:
+      RestApiId: !Ref SportsAPI
+
+  # API Stage
+  APIStage:
+    Type: AWS::ApiGateway::Stage
+    Properties:
+      DeploymentId: !Ref APIDeployment
+      RestApiId: !Ref SportsAPI
+      StageName: prod
+
+Outputs:
+  ApiEndpoint:
+    Description: API Gateway Endpoint URL
+    Value: !Sub "https://${SportsAPI}.execute-api.${AWS::Region}.amazonaws.com/prod/sports"
