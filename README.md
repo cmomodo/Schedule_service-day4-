@@ -94,3 +94,15 @@ To clean up all resources:
 - Network security groups restrict traffic to required ports only
 - Secrets management via environment variables
 - Least privilege IAM roles
+
+## YouTube Tutorial
+
+This project is part of the 30-Day DevOps Challenge. To follow along with this tutorial:
+
+1. Watch the step-by-step video guide on YouTube
+2. Clone this repository to your local machine
+3. Follow the deployment instructions in the README
+4. Experiment with the provided CloudFormation templates
+5. Test the API endpoints using curl or Postman
+
+For more DevOps challenges and tutorials, visit Ifeanyi Otunye's LinkedIn page: [https://www.linkedin.com/in/ifeanyi-otuonye/](https://www.linkedin.com/in/ifeanyi-otuonye/)
