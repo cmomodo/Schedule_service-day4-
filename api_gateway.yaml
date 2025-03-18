@@ -5,7 +5,7 @@ Parameters:
   LoadBalancerDNS:
     Type: String
     Description: DNS name of the Application Load Balancer
-    Default: "sports-api-alb-1583485513.us-east-1.elb.amazonaws.com"
+    Default: "sports-api-alb-634608875.us-east-1.elb.amazonaws.com"
 
 Resources:
   # API Gateway
@@ -26,7 +26,7 @@ Resources:
       ParentId: !GetAtt SportsAPI.RootResourceId
       PathPart: "sports"
 
-  # API Method
+  # GET Method
   SportsMethod:
     Type: AWS::ApiGateway::Method
     Properties:
@@ -37,27 +37,94 @@ Resources:
       Integration:
         Type: HTTP_PROXY
         IntegrationHttpMethod: GET
-        Uri: !Sub "http://sports-api-alb-1583485513.us-east-1.elb.amazonaws.com:8080/sports"
+        Uri: !Sub "http://${LoadBalancerDNS}:8080/sports"
         TimeoutInMillis: 29000
+        PassthroughBehavior: WHEN_NO_MATCH
         IntegrationResponses:
           - StatusCode: 200
+          - StatusCode: 400
+            SelectionPattern: '4\d{2}'
+          - StatusCode: 500
+            SelectionPattern: '5\d{2}'
+      MethodResponses:
+        - StatusCode: 200
+          ResponseParameters:
+            method.response.header.Access-Control-Allow-Origin: true
+        - StatusCode: 400
+        - StatusCode: 500
+
+  # OPTIONS Method for CORS
+  SportsOptionsMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref SportsAPI
+      ResourceId: !Ref SportsResource
+      HttpMethod: OPTIONS
+      AuthorizationType: NONE
+      Integration:
+        Type: MOCK
+        IntegrationResponses:
+          - StatusCode: 200
+            ResponseParameters:
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'*'"
+        RequestTemplates:
+          application/json: '{"statusCode": 200}'
+      MethodResponses:
+        - StatusCode: 200
+          ResponseParameters:
+            method.response.header.Access-Control-Allow-Headers: true
+            method.response.header.Access-Control-Allow-Methods: true
+            method.response.header.Access-Control-Allow-Origin: true
 
   # API Deployment
   APIDeployment:
     Type: AWS::ApiGateway::Deployment
-    DependsOn: SportsMethod
+    DependsOn:
+      - SportsMethod
+      - SportsOptionsMethod
     Properties:
       RestApiId: !Ref SportsAPI
 
-  # API Stage
+  # API Stage with Logging Enabled
   APIStage:
     Type: AWS::ApiGateway::Stage
     Properties:
       DeploymentId: !Ref APIDeployment
       RestApiId: !Ref SportsAPI
       StageName: prod
+      MethodSettings:
+        - ResourcePath: "/*"
+          HttpMethod: "*"
+          LoggingLevel: INFO
+          DataTraceEnabled: true
+          MetricsEnabled: true
+      AccessLogSetting:
+        DestinationArn: !GetAtt APIGatewayAccessLogs.Arn
+        Format: '{ "requestId":"$context.requestId", "ip": "$context.identity.sourceIp", "requestTime":"$context.requestTime", "httpMethod":"$context.httpMethod", "routeKey":"$context.routeKey", "status":"$context.status", "protocol":"$context.protocol", "responseLength":"$context.responseLength", "errorMessage":"$context.error.message" }'
+
+  # CloudWatch Log Group for API Gateway Access Logs
+  APIGatewayAccessLogs:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/apigateway/${SportsAPI}/access-logs"
+      RetentionInDays: 7
+
+  # CloudWatch Log Group for API Gateway Execution Logs
+  APIGatewayExecutionLogs:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "API-Gateway-Execution-Logs_${SportsAPI}/prod"
+      RetentionInDays: 7
 
 Outputs:
   ApiEndpoint:
     Description: API Gateway Endpoint URL
     Value: !Sub "https://${SportsAPI}.execute-api.${AWS::Region}.amazonaws.com/prod/sports"
+  AccessLogsArn:
+    Description: ARN of the API Gateway Access Logs
+    Value: !GetAtt APIGatewayAccessLogs.Arn
+  ExecutionLogsArn:
+    Description: ARN of the API Gateway Execution Logs
+    Value: !GetAtt APIGatewayExecutionLogs.Arn
